@@ -1,10 +1,5 @@
 package com.mrpowergamerbr.protocolsupportswordblocking;
 
-import java.lang.reflect.InvocationTargetException;
-import org.bukkit.Bukkit;
-import org.bukkit.event.Listener;
-import org.bukkit.plugin.java.JavaPlugin;
-
 import com.comphenix.protocol.PacketType;
 import com.comphenix.protocol.ProtocolLibrary;
 import com.comphenix.protocol.ProtocolManager;
@@ -15,9 +10,13 @@ import com.comphenix.protocol.wrappers.EnumWrappers.Hand;
 import com.comphenix.protocol.wrappers.WrappedWatchableObject;
 import com.mrpowergamerbr.protocolsupportswordblocking.packetwrapper.WrapperPlayClientBlockPlace;
 import com.mrpowergamerbr.protocolsupportswordblocking.packetwrapper.WrapperPlayServerEntityMetadata;
-
+import org.bukkit.Bukkit;
+import org.bukkit.event.Listener;
+import org.bukkit.plugin.java.JavaPlugin;
 import protocolsupport.api.ProtocolSupportAPI;
 import protocolsupport.api.ProtocolVersion;
+
+import java.lang.reflect.InvocationTargetException;
 
 public class ProtocolSupportSwordBlocking extends JavaPlugin implements Listener {
 	public void onEnable() {

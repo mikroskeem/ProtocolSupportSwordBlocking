@@ -1,4 +1,5 @@
 name: ProtocolSupportSwordBlocking
 main: com.mrpowergamerbr.protocolsupportswordblocking.ProtocolSupportSwordBlocking
-version: 1.0.0
-softdepend: ["ProtocolSupport", "ProtocolLib"]
+version: ${project.version}
+authors: ["MrPowerGamerBR", "mikroskeem"]
+depend: ["ProtocolSupport", "ProtocolLib"]
