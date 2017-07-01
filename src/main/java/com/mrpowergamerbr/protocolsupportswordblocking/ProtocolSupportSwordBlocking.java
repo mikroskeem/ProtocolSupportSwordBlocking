@@ -27,8 +27,7 @@ public class ProtocolSupportSwordBlocking extends JavaPlugin implements Listener
         // Block Place (sword blocking)
         // We don't need to process block dig because it seems that's unaffected (yay!)
         protocolManager.addPacketListener(new PacketAdapter(this,
-                ListenerPriority.HIGHEST,
-                new PacketType[] { PacketType.Play.Client.BLOCK_PLACE, PacketType.Play.Server.ENTITY_METADATA }) {
+                ListenerPriority.HIGHEST, PacketType.Play.Client.BLOCK_PLACE, PacketType.Play.Server.ENTITY_METADATA) {
             @Override
             public void onPacketReceiving(PacketEvent event) {
                 if (ProtocolSupportAPI.getProtocolVersion(event.getPlayer()).isBefore(ProtocolVersion.MINECRAFT_1_9)) { // If it is a client before MC 1.9...
