@@ -34,6 +34,11 @@
                         </executions>
                     </plugin>
                 </plugins>
+                <resources>
+                    <resource>
+                        <directory>src/main/extra-resources</directory>
+                    </resource>
+                </resources>
             </build>
         </profile>
     </profiles>
