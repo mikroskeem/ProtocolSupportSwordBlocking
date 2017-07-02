@@ -5,64 +5,116 @@ import com.comphenix.protocol.ProtocolLibrary;
 import com.comphenix.protocol.ProtocolManager;
 import com.comphenix.protocol.events.ListenerPriority;
 import com.comphenix.protocol.events.PacketAdapter;
+import com.comphenix.protocol.events.PacketContainer;
 import com.comphenix.protocol.events.PacketEvent;
-import com.comphenix.protocol.wrappers.EnumWrappers.Hand;
-import com.comphenix.protocol.wrappers.WrappedWatchableObject;
-import com.mrpowergamerbr.protocolsupportswordblocking.packetwrapper.WrapperPlayClientBlockPlace;
-import com.mrpowergamerbr.protocolsupportswordblocking.packetwrapper.WrapperPlayServerEntityMetadata;
-import org.bukkit.Bukkit;
-import org.bukkit.event.Listener;
+import com.comphenix.protocol.wrappers.EnumWrappers;
+import org.bukkit.entity.Entity;
+import org.bukkit.entity.LivingEntity;
 import org.bukkit.plugin.java.JavaPlugin;
 import protocolsupport.api.ProtocolSupportAPI;
 import protocolsupport.api.ProtocolVersion;
 
 import java.lang.reflect.InvocationTargetException;
 
-public class ProtocolSupportSwordBlocking extends JavaPlugin implements Listener {
+
+public class ProtocolSupportSwordBlocking extends JavaPlugin {
+    private ProtocolManager protocolManager;
+    private SwordBlockingPacketAdapter packetAdapter;
+
+    @Override
     public void onEnable() {
-        Bukkit.getPluginManager().registerEvents(this, this);
+        /* Register packet listener */
+        protocolManager = ProtocolLibrary.getProtocolManager();
+        packetAdapter = new SwordBlockingPacketAdapter(this);
+        protocolManager.addPacketListener(packetAdapter);
+    }
 
-        ProtocolManager protocolManager = ProtocolLibrary.getProtocolManager();
+    @Override
+    public void onDisable() {
+        if(protocolManager == null || packetAdapter == null) return;
+        protocolManager.removePacketListener(packetAdapter);
+    }
 
-        // Block Place (sword blocking)
-        // We don't need to process block dig because it seems that's unaffected (yay!)
-        protocolManager.addPacketListener(new PacketAdapter(this,
-                ListenerPriority.HIGHEST, PacketType.Play.Client.BLOCK_PLACE, PacketType.Play.Server.ENTITY_METADATA) {
-            @Override
-            public void onPacketReceiving(PacketEvent event) {
-                if (ProtocolSupportAPI.getProtocolVersion(event.getPlayer()).isBefore(ProtocolVersion.MINECRAFT_1_9)) { // If it is a client before MC 1.9...
-                    if (event.getPacketType() == PacketType.Play.Client.BLOCK_PLACE) { // and it is a block place packet
-                        event.setCancelled(true); // We are going to cancel this packet...
-                        WrapperPlayClientBlockPlace wrappedPacket = new WrapperPlayClientBlockPlace(event.getPacket().shallowClone()); // Clone the packet!
-                        wrappedPacket.setHand(Hand.OFF_HAND); // Change the held item to off hand
-                        try {
-                            ProtocolLibrary.getProtocolManager().recieveClientPacket(event.getPlayer(), event.getPacket(), false); // Now we are going to resend the original packet...
-                            ProtocolLibrary.getProtocolManager().recieveClientPacket(event.getPlayer(), wrappedPacket.getHandle(), false); // ...and simulate a receive client packet
-                        } catch (InvocationTargetException | IllegalAccessException e) {
-                            e.printStackTrace();
-                        }
+    /* Packet adapter code */
+    public static class SwordBlockingPacketAdapter extends PacketAdapter {
+        private final ProtocolSupportSwordBlocking plugin;
+
+        public SwordBlockingPacketAdapter(ProtocolSupportSwordBlocking plugin) {
+            super(plugin,
+                    /* Priority */
+                    ListenerPriority.HIGHEST,
+                    /* Packet types to process */
+                    PacketType.Play.Client.BLOCK_PLACE,
+                    PacketType.Play.Server.ENTITY_METADATA);
+
+            this.plugin = plugin;
+        }
+
+        @Override
+        public void onPacketReceiving(PacketEvent event) {
+            /* This event handler handles clients before MC 1.9 */
+            if(ProtocolSupportAPI.getProtocolVersion(event.getPlayer()).isAfter(ProtocolVersion.MINECRAFT_1_8))
+                return;
+
+            /* This event handler handles block place packets */
+            if(event.getPacketType() != PacketType.Play.Client.BLOCK_PLACE)
+                return;
+
+            /* Cancel packet */
+            event.setCancelled(true);
+
+            /* Shallow clone the packet */
+            PacketContainer clonedPacket = event.getPacket().shallowClone();
+
+            /* Set held item location to off hand */
+            clonedPacket.getHands().write(0, EnumWrappers.Hand.OFF_HAND);
+
+            /* Send packets */
+            try {
+                /* First resend original packet, and then simulate receive packet */
+                plugin.protocolManager.recieveClientPacket(event.getPlayer(), event.getPacket(), false);
+                plugin.protocolManager.recieveClientPacket(event.getPlayer(), clonedPacket, false);
+            } catch (InvocationTargetException | IllegalAccessException e) {
+                e.printStackTrace();
+            }
+        }
+
+        @Override
+        public void onPacketSending(PacketEvent event) {
+            /* This event handler handles clients before MC 1.9 */
+            if(ProtocolSupportAPI.getProtocolVersion(event.getPlayer()).isAfter(ProtocolVersion.MINECRAFT_1_8))
+                return;
+
+            /* This event handler handles entity metadata packets, see http://wiki.vg/Entities#Entity_Metadata_Format */
+            if(event.getPacketType() != PacketType.Play.Server.ENTITY_METADATA)
+                return;
+
+            /* Check if target entity is living entity (see http://wiki.vg/Entities#Living) */
+            Entity entity = event.getPacket().getEntityModifier(event.getPlayer().getWorld()).read(0);
+            if(!(entity instanceof LivingEntity))
+                return;
+
+            /* Clone packet for modification */
+            PacketContainer clonedPacket = event.getPacket().deepClone();
+
+            /* Iterate over watchable objects */
+            clonedPacket.getWatchableCollectionModifier().read(0).forEach(wwo -> {
+                /* Index 6 = hand states */
+                if(wwo.getIndex() == 6) {
+                    /*
+                     * 1 = Main hand, 3 = Off hand
+                     * If value is 3 (off hand) , set it back to 1 so plugin can fake sword blocking animation for
+                     * older Minecraft clients
+                     */
+                    Object value = wwo.getValue();
+                    if(value instanceof Byte && (byte) value == 3) {
+                        wwo.setValue((byte) 1);
                     }
                 }
-            }
+            });
 
-            @Override
-            public void onPacketSending(PacketEvent event) {
-                if (ProtocolSupportAPI.getProtocolVersion(event.getPlayer()).isBefore(ProtocolVersion.MINECRAFT_1_9)) { // If it is a client before MC 1.9...
-                    if (event.getPacketType() == PacketType.Play.Server.ENTITY_METADATA) { // And it is a entity metadata packet
-                        WrapperPlayServerEntityMetadata wrappedPacket = new WrapperPlayServerEntityMetadata(event.getPacket().deepClone()); // Clone the packet!
-                        for (WrappedWatchableObject wwo : wrappedPacket.getMetadata()) { // Now let's loop our watchable objects...
-                            if (wwo.getIndex() == 6) { // Index 6 = Shield
-                                // Value 3 = Off Hand, Value 1 = Main Hand
-                                // We are going to set it to 1 (main hand) if the value is 3 (off hand) so we can fake a sword blocking animation for older MC clients
-                                if(wwo.getValue() instanceof Byte && (byte) wwo.getValue() == 3) {
-                                    wwo.setValue((byte) 1);
-                                }
-                            }
-                        }
-                        event.setPacket(wrappedPacket.getHandle());
-                    }
-                }
-            }
-        });
+            /* Send modified packet instead of original one */
+            event.setPacket(clonedPacket);
+        }
     }
 }
